@@ -1,0 +1,27 @@
+{
+  "name": "MOC par défaut",
+  "groupe": "MOC",
+  "output": ["Faible", "Moyen", "Bon", "Excellent"],
+  "variables": {
+    "Vitesse": {"cols": ["movement_acceleration", "movement_sprint_speed"]},
+    "Tir": {"cols": ["mentality_positioning", "attacking_finishing", "power_shot_power", "power_long_shots", "attacking_volleys", "mentality_penalties"]},
+    "Passe": {"cols": ["mentality_vision", "attacking_crossing", "skill_fk_accuracy", "attacking_short_passing", "skill_long_passing", "skill_curve"]},
+    "Dribbles": {"cols": ["movement_agility", "movement_balance", "movement_reactions", "skill_ball_control", "skill_dribbling", "mentality_composure"]},
+    "Défense": {"cols": ["mentality_interceptions", "attacking_heading_accuracy", "defending_marking_awareness", "defending_standing_tackle", "defending_sliding_tackle"]},
+    "Physique": {"cols": ["power_jumping", "power_stamina", "power_strength", "mentality_aggression"]}
+  },
+  "rules": [
+    {"id": "R1", "if": [{"var": "Passe", "is": "high"}, {"var": "Dribbles", "is": "high"}], "op": "AND", "then": "Excellent", "weight": 1},
+    {"id": "R2", "if": [{"var": "Passe", "is": "high"}, {"var": "Tir", "is": "high"}], "op": "AND", "then": "Excellent", "weight": 1},
+    {"id": "R3", "if": [{"var": "Dribbles", "is": "high"}, {"var": "Vitesse", "is": "high"}, {"var": "Tir", "is": "high"}], "op": "AND", "then": "Excellent", "weight": 1},
+    {"id": "R4", "if": [{"var": "Passe", "is": "high"}, {"var": "Dribbles", "is": "mid"}], "op": "AND", "then": "Bon", "weight": 1},
+    {"id": "R5", "if": [{"var": "Dribbles", "is": "high"}, {"var": "Tir", "is": "mid"}], "op": "AND", "then": "Bon", "weight": 1},
+    {"id": "R6", "if": [{"var": "Dribbles", "is": "high"}, {"var": "Vitesse", "is": "high"}], "op": "AND", "then": "Bon", "weight": 1},
+    {"id": "R7", "if": [{"var": "Passe", "is": "mid"}, {"var": "Dribbles", "is": "mid"}, {"var": "Tir", "is": "mid"}], "op": "AND", "then": "Moyen", "weight": 1},
+    {"id": "R8", "if": [{"var": "Passe", "is": "mid"}, {"var": "Dribbles", "is": "mid"}], "op": "AND", "then": "Moyen", "weight": 1},
+    {"id": "R9", "if": [{"var": "Passe", "is": "high"}, {"var": "Dribbles", "is": "low"}], "op": "AND", "then": "Moyen", "weight": 1},
+    {"id": "R10", "if": [{"var": "Passe", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
+    {"id": "R11", "if": [{"var": "Dribbles", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
+    {"id": "R12", "if": [{"var": "Tir", "is": "low"}, {"var": "Vitesse", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1}
+  ]
+}
