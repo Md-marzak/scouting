@@ -1,0 +1,262 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{hyperref}
+\geometry{margin=2.2cm}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\newcommand{\capture}[2]{%
+  \begin{figure}[H]\centering
+  \includegraphics[width=0.96\linewidth,height=0.48\textheight,keepaspectratio]{#2}
+  \caption{#1}
+  \end{figure}
+}
+
+\title{\textbf{Laboratoire 5}\\Segmentation et partitionnement des traces GPS}
+\author{Étudiant : \textbf{MOUAD MARZAQ}\\
+Professeure : \textbf{GHYZLANE CHERRADI}}
+\date{10 novembre 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Objectif}
+Ce laboratoire compare plusieurs façons d'organiser et d'interroger un historique
+de positions GPS sous PostgreSQL/PostGIS : indexation spatiale et temporelle,
+segmentation logique en bandes, partitions journalières, tuilage et réorganisation
+physique. Deux requêtes servent de fil conducteur : \textbf{Q1}, qui compte les
+positions du 1\textsuperscript{er} novembre situées à moins de 500 m de la
+sous-station 1, et \textbf{Q2}, qui recherche les véhicules à moins de 2 km d'un
+point d'incident sur la ligne haute tension 1 pendant la dernière heure du 2 novembre.
+
+Les géométries sont exprimées en EPSG:32629, un système métrique. Les positions
+du jeu d'essai sont synthétiques : 200 véhicules, un relevé toutes les deux
+minutes et sept jours, soit 1\,008\,000 lignes. Les performances dépendent du
+matériel, du cache, de la version PostgreSQL/PostGIS et des données réelles.
+
+\section{Préparation et protocole}
+Le script \texttt{lab5.sql} crée un schéma isolé nommé
+\texttt{lab5\_soumission}; il ne supprime pas les tables sources
+\texttt{public.sous\_stations} et \texttt{public.lignes\_haute\_tension}.
+L'exécution se fait avec \texttt{psql} sur la base de données du laboratoire.
+La commande utilisée doit afficher les ordres et les temps :
+
+\begin{verbatim}
+psql -h localhost -p 5433 -U postgres `
+  -d ReseauElectriqueSIG -v ON_ERROR_STOP=1 `
+  -a -f lab5.sql
+\end{verbatim}
+
+Pour les comparaisons de plans, le script répète les mesures : la seconde
+exécution (cache plus chaud) est celle à reporter. Les temps ne sont pas
+comparables entre machines; les plans \texttt{EXPLAIN (ANALYZE, BUFFERS)}
+permettent aussi de relever le type de parcours et les pages lues ou trouvées
+dans le cache. Les valeurs mesurées et les captures doivent provenir de
+l'exécution réelle; les tableaux ci-dessous reprennent les résultats lisibles
+dans les captures fournies, et signalent les mesures absentes.
+
+\section{Task 1 — Référence et index}
+\subsection{Jeu de données}
+La fonction de génération place une majorité de points dans un voisinage
+aléatoire des sous-stations et le reste dans l'emprise du réseau. Le contrôle
+attendu est de 1\,008\,000 positions, du 27 octobre à 00:00 au 2 novembre à
+23:58. Les index GiST sur la géométrie et B-tree sur la date fournissent deux
+chemins d'accès adaptés aux prédicats spatiaux et temporels.
+
+\capture{Contrôle du volume et de la période du jeu de données}{captures/shot_233526.png}
+
+\subsection{Mesures Q1 et Q2}
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Requête & Lignes & Temps (ms) & Buffers hit & Buffers read \\
+\midrule
+Q1, table de référence & 6\,331 & 357,539 & 2\,802 & 7\,879 \\
+\bottomrule
+\end{tabular}
+\caption{Q1 de référence selon le plan \texttt{EXPLAIN (ANALYZE, BUFFERS)} capturé.}
+\end{table}
+
+\capture{Plan d'exécution de Q1 sur la table non partitionnée}{captures/shot_234040.png}
+\capture{Taille de la table et des index après création}{captures/shot_233929.png}
+
+\textbf{Interprétation.} Un index spatial permet de retrouver rapidement les
+identifiants de lignes proches, mais il n'assure pas que les lignes de la table
+soient rangées spatialement sur disque. Un parcours peut donc consulter de
+nombreuses pages du tas pour récupérer les géométries et les autres colonnes.
+L'index ne supprime pas non plus le coût de la vérification exacte
+\texttt{ST\_DWithin}. Le plan et les buffers observés permettent de distinguer
+les pages réellement lues des pages déjà présentes en mémoire.
+
+\section{Task 2 — Segmentation logique en trois zones}
+La coordonnée Y de l'emprise est divisée en trois intervalles de même hauteur :
+Sud (1), Centre (2) et Nord (3). La colonne \texttt{zone\_id} matérialise cette
+segmentation; l'index composite \texttt{(zone\_id, date)} vise les requêtes qui
+combinent zone et période.
+
+Les résultats capturés confirment que les 1\,008\,000 positions ont toutes
+reçu une zone (aucune valeur NULL). La sous-station 1 se trouve dans la zone 2.
+Après l'ajout de \texttt{zone\_id}, la taille mesurée passe de 81 à 171 Mo pour
+la table et de 47 à 100 Mo pour les index; le \texttt{VACUUM} n'a pas réduit
+ces valeurs dans la mesure disponible.
+
+\capture{Taille après ajout de la colonne de zone}{captures/shot_234604.png}
+\capture{Vérification du nombre de zones NULL}{captures/shot_234919.png}
+\capture{Zone attribuée à la sous-station 1}{captures/shot_234938.png}
+
+Le filtre \texttt{zone\_id = 2} de Q1 ne conserve que 3\,571 positions,
+contre 6\,331 pour la requête de référence. La segmentation en bandes n'est
+donc pas une restriction exacte du disque de 500 m : des points du voisinage
+de la station se trouvent de l'autre côté d'une frontière de zone. Ce filtre
+ne doit pas être utilisé seul pour répondre à une requête spatiale exacte.
+Le plan capturé sans index composite dure 413,981 ms et lit 10\,736 blocs
+depuis le stockage; le nombre de lignes retournées confirme l'écart de
+résultat.
+
+\capture{Plan de Q1 avec filtre logique sur la zone}{captures/shot_234315.png}
+
+\section{Task 3 — Partitionnement journalier}
+La table \texttt{gps\_part} est partitionnée par plages de dates, avec une
+partition par jour et une partition par défaut. Un prédicat sur \texttt{date}
+permet l'élagage des partitions avant leur lecture; sans ce prédicat, une
+condition uniquement spatiale ne permet généralement pas de choisir un jour et
+les partitions restantes doivent être considérées.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Q1 & Lignes & Temps (ms) & Buffers hit & Buffers read \\
+\midrule
+Table de référence & 6\,331 & 357,539 & 2\,802 & 7\,879 \\
+Partition journalière & 6\,331 & 91,193 & 1\,481 & 60 \\
+\bottomrule
+\end{tabular}
+\caption{Comparaison des plans Q1 capturés. Les deux plans retournent le même compte.}
+\end{table}
+
+L'insertion dans une table partitionnée vise directement une seule partition.
+La taille des index à maintenir et le volume de pages concernés peuvent donc
+être réduits. Le résultat réel dépend toutefois des index, des écritures WAL,
+du cache et du système de stockage. Pour la rétention, supprimer une partition
+ancienne par \texttt{DROP TABLE} est habituellement plus direct qu'effacer ses
+lignes une à une par \texttt{DELETE}; une purge par \texttt{DELETE} laisse aussi
+des espaces morts jusqu'à la maintenance et ne garantit pas une réduction
+immédiate du fichier.
+
+\capture{Effectifs des partitions journalières}{captures/shot_000424.png}
+\capture{Plan Q1 sur la partition du 1\textsuperscript{er} novembre}{captures/shot_000707.png}
+\capture{Plan avec borne temporelle dynamique}{captures/shot_000547.png}
+
+La requête dynamique est exécutée avant l'ajout du 3 novembre dans le script :
+elle se termine donc à la dernière position alors disponible, le 2 novembre à
+23:58. Elle illustre l'élagage à l'exécution, sans correspondre exactement à la
+fenêtre Q2 de 23:00 à minuit. Les captures disponibles ne montrent pas les
+durées comparatives d'insertion et de purge; elles ne sont donc pas chiffrées ici.
+
+\section{Task 4 — Tuilage et GeoHash}
+\subsection{Grille de 2 km}
+La grille carrée sert à agréger les positions par cellule et à construire une
+couche de densité. Une jointure \texttt{ST\_Intersects} peut attribuer une
+position située exactement sur une frontière à plusieurs cellules. Le calcul
+par \texttt{floor(ST\_X/2000)} et \texttt{floor(ST\_Y/2000)} donne au contraire
+une affectation unique, à condition d'utiliser le même origine de grille.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Méthode & Cellules non vides & Min. & Max. & Moyenne / écart-type \\
+\midrule
+Grille 2 km & 20 & 11 & 30\,922 & 7\,200,00 / 9\,156,57 \\
+\bottomrule
+\end{tabular}
+\caption{Densité du 1\textsuperscript{er} novembre.}
+\end{table}
+
+\capture{Plan de calcul des densités par cellules}{captures/shot_001355.png}
+\capture{Statistiques des cellules non vides}{captures/shot_001422.png}
+
+\subsection{Filtre GeoHash de Q2}
+Le GeoHash est calculé après transformation en EPSG:4326. Un préfiltre par
+préfixe réduit les candidats, mais une cellule GeoHash n'est pas un cercle de
+rayon 2 km. Le prédicat \texttt{ST\_DWithin} doit donc rester dans la requête
+pour confirmer la distance exacte. Le rapport de différences entre Q2 de
+référence et Q2 optimisée sert à détecter les faux négatifs introduits par un
+ensemble de cellules candidates trop étroit.
+
+Les quatre coins d'un rectangle suffisent pour retrouver les bornes min/max
+d'une grille carrée alignée, mais cela ne signifie pas que les quatre GeoHash
+des coins énumèrent automatiquement toutes les cellules GeoHash touchées. La
+couverture doit être testée (ou calculée en ajoutant les cellules voisines)
+avant d'utiliser ce préfiltre en production. Le tuilage complète un index GiST;
+il ne le remplace pas pour une recherche de voisinage exacte.
+
+\capture{Plan Q2 avec préfiltre GeoHash et distance exacte}{captures/shot_002005.png}
+
+Dans cette exécution, le plan GeoHash renvoie 200 véhicules distincts en
+1\,430,833 ms. Le préfiltre est une approximation : \texttt{ST\_DWithin} reste
+indispensable pour confirmer la distance. Les performances affichées ne sont
+pas directement comparables à Q2 de référence, car les captures ne documentent
+pas une répétition contrôlée des mêmes conditions de cache.
+
+\section{Task 5 — Clustering physique}
+\texttt{CLUSTER} réécrit une table en suivant l'ordre d'un index existant.
+L'expérience utilise un index \texttt{(vehicule\_id, date)} pour le 30 octobre,
+un index GeoHash pour le 31 octobre et un index GiST pour le 1\textsuperscript{er}
+novembre. La corrélation de \texttt{pg\_stats} indique si l'ordre physique des
+lignes ressemble à l'ordre logique d'une colonne. Une corrélation proche de
+\(1\) signale une organisation croissante; une valeur proche de \(-1\) indique
+l'ordre inverse.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llr}
+\toprule
+Partition & Ordre de clustering & Corrélation après \\
+\midrule
+30 octobre & \texttt{vehicule\_id} & 1,000 \\
+31 octobre & \texttt{geohash} & 1,000 \\
+1\textsuperscript{er} novembre & GiST sur la géométrie; date & 0,004 \\
+\bottomrule
+\end{tabular}
+\caption{Valeurs de corrélation après \texttt{CLUSTER}, selon \texttt{pg\_stats}.}
+\end{table}
+
+Le clustering est une réorganisation ponctuelle : les insertions suivantes
+peuvent dégrader progressivement l'ordre. Son intérêt doit être confirmé par les
+plans Q1/Q2 et le coût de maintenance.
+
+\capture{Corrélations mesurées après clustering}{captures/shot_002819.png}
+
+\section{Task 6 — Synthèse et choix d'architecture}
+\textbf{Conclusion.} Pour un historique qui croît continuellement et dont les
+requêtes portent sur une période, le partitionnement par date constitue une
+base adaptée : il facilite l'élagage temporel et la purge par période. Chaque
+partition peut conserver un index GiST pour les recherches spatiales et un
+index temporel/composite selon les requêtes mesurées. Un index GeoHash peut
+compléter cette organisation si le préfiltre est assez sélectif et si sa
+couverture est validée contre Q2. Le conserver sur chaque ligne augmente le
+volume de stockage et le coût d'écriture; il faut donc comparer ce coût au gain
+mesuré. Enfin, un clustering périodique n'est à retenir que si les tests
+montrent un bénéfice durable malgré les nouvelles insertions.
+
+Les valeurs de temps et de buffers correspondent à l'environnement de
+l'exécution capturée et peuvent varier avec le matériel, le cache et la version
+de PostgreSQL/PostGIS. Les mesures d'insertion et de purge n'étant pas visibles
+dans les captures fournies, elles restent à relever si une comparaison chiffrée
+de ces opérations est exigée.
+
+\end{document}

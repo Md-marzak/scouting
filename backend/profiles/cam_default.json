@@ -22,6 +22,15 @@
     {"id": "R9", "if": [{"var": "Passe", "is": "high"}, {"var": "Dribbles", "is": "low"}], "op": "AND", "then": "Moyen", "weight": 1},
     {"id": "R10", "if": [{"var": "Passe", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
     {"id": "R11", "if": [{"var": "Dribbles", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
-    {"id": "R12", "if": [{"var": "Tir", "is": "low"}, {"var": "Vitesse", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1}
+    {"id": "R12", "if": [{"var": "Tir", "is": "low"}, {"var": "Vitesse", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
+    {"id": "R13", "if": [{"var": "Passe", "is": "high"}, {"var": "Physique", "is": "high"}], "op": "AND", "then": "Bon", "weight": 0.8},
+    {"id": "R14", "if": [{"var": "Passe", "is": "mid"}, {"var": "Dribbles", "is": "high"}, {"var": "Physique", "is": "mid"}], "op": "AND", "then": "Bon", "weight": 0.9},
+    {"id": "R15", "if": [{"var": "Passe", "is": "high"}, {"var": "Dribbles", "is": "high"}, {"var": "Vitesse", "is": "mid"}], "op": "AND", "then": "Excellent", "weight": 0.9},
+    {"id": "R16", "if": [{"var": "Passe", "is": "mid"}, {"var": "Vitesse", "is": "high"}, {"var": "Tir", "is": "mid"}], "op": "AND", "then": "Bon", "weight": 0.8},
+    {"id": "R17", "if": [{"var": "Passe", "is": "mid"}, {"var": "Défense", "is": "high"}, {"var": "Dribbles", "is": "mid"}], "op": "AND", "then": "Moyen", "weight": 0.7},
+    {"id": "R18", "if": [{"var": "Passe", "is": "high"}, {"var": "Défense", "is": "high"}, {"var": "Dribbles", "is": "high"}], "op": "AND", "then": "Excellent", "weight": 0.8},
+    {"id": "R19", "if": [{"var": "Passe", "is": "low"}, {"var": "Dribbles", "is": "low"}], "op": "AND", "then": "Faible", "weight": 1},
+    {"id": "R20", "if": [{"var": "Dribbles", "is": "low"}, {"var": "Tir", "is": "low"}], "op": "AND", "then": "Faible", "weight": 0.9},
+    {"id": "R21", "if": [{"var": "Passe", "is": "mid"}, {"var": "Dribbles", "is": "low"}, {"var": "Tir", "is": "mid"}], "op": "AND", "then": "Moyen", "weight": 0.7}
   ]
 }

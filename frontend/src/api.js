@@ -21,6 +21,7 @@ export const api = {
   catalog: () => fetch("/api/catalog").then(json),
   needsSearch: (body) => send("POST", "/api/needs-search", body),
   evaluatePlayer: (body) => send("POST", "/api/evaluate-player", body),
+  explainPlayer: (body) => send("POST", "/api/explain-player", body),
   suggest: (body) => send("POST", "/api/suggest-rules", body),
 };
 

@@ -1,13 +1,12 @@
 # Scouting flou : milieux offensifs (MOC)
 
-Application de scouting football en logique floue, basée sur scikit-fuzzy. Le client saisit ses critères avec leurs unités
-(vitesse en km/h, âge, taille, valeur en M€, notes) et règle lui-même les règles floues du poste.
-Il peut aussi entrer les notes moyennes d'un joueur par catégorie pour obtenir une évaluation expliquée
-de son adéquation au poste.
+Application de scouting football en logique floue, basée sur scikit-fuzzy. Le client saisit ses critères
+avec leurs unités et règle les règles floues du poste. Il peut aussi entrer les attributs détaillés
+d'un joueur pour obtenir une évaluation expliquée de son adéquation au poste.
 
 ```
 backend/   FastAPI + moteur flou (fuzzy_engine.py) + conversion d'unités (needs.py)
-frontend/  React (Vite) : page « Besoin client » + éditeur de « Règles du client »
+frontend/  React (Vite) : recherche selon le besoin, évaluation d'un joueur et éditeur de règles
 ```
 
 ## 1. Données
@@ -36,8 +35,11 @@ npm install
 npm run dev                      # http://localhost:5173
 ```
 
-Pour la suggestion de règles par IA (optionnel, API gratuite Groq) :
-`$env:GROQ_API_KEY="ta_cle"` avant de lancer uvicorn. Ne mets jamais la clé dans le code ni sur GitHub.
+Pour les fonctions IA (suggestion de règles et explication du joueur, via Groq), définis
+`GROQ_API_KEY` dans l'environnement avant de lancer uvicorn, par exemple sous PowerShell :
+`$env:GROQ_API_KEY="ta_nouvelle_cle"`. Ne mets jamais la clé dans le code ni sur GitHub.
+La clé est utilisée uniquement par le backend. Dans « Mon joueur », clique sur
+« Générer l’explication » après l’analyse pour obtenir le commentaire du scout IA.
 
 ## 3. Comment ça marche
 
@@ -48,9 +50,11 @@ Pour la suggestion de règles par IA (optionnel, API gratuite Groq) :
 4. **Besoin client** : chaque critère saisi (ex. vitesse ≥ 32 km/h) donne un degré de satisfaction flou entre 0 et 1,
    avec une tolérance (ex. 2 km/h). Combinaison : moyenne pondérée ou ET flou pondéré (Dubois-Prade).
 5. **Compatibilité** = mélange du besoin client et du score des règles du poste (curseur).
-6. **Mon joueur** : saisis le nom et les notes moyennes (0–99) pour Vitesse, Tir, Passe, Dribbles,
-   Défense et Physique. L'application compare chaque catégorie aux milieux offensifs de référence,
-   applique les règles du profil sélectionné et affiche le verdict ainsi que les règles déclenchées.
+6. **Mon joueur** : saisis le nom et les attributs individuels de la carte (accélération, sprint,
+   finition, passes, dribbles, défense, physique, etc., sur 99). Les catégories sont déduites
+   automatiquement : par exemple, Vitesse est calculée à partir de l'accélération et de la vitesse
+   de sprint. Le moteur compare les attributs aux milieux offensifs de référence, applique les règles
+   du profil sélectionné et affiche le verdict, le radar de profil, les forces et les règles déclenchées.
 
 ## 4. Limites à connaître (à écrire dans le rapport)
 

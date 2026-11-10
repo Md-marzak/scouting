@@ -94,12 +94,6 @@ class FuzzyEngine:
             for c in cfg["cols"]:
                 if c not in self.ref:
                     self.ref[c] = np.sort(population[c].dropna().values.astype(float))
-        self.variable_ref = {
-            variable: np.sort(
-                population[cfg["cols"]].astype(float).mean(axis=1).dropna().values
-            )
-            for variable, cfg in profile["variables"].items()
-        }
         pop_vs = self._variable_scores(population)
         self.q_var = {
             v: tuple(cfg["params"]) if cfg.get("params")
@@ -130,6 +124,12 @@ class FuzzyEngine:
             s = np.clip(s * float(r.get("weight", 1.0)), 0, 1)
             strengths[r.get("id", f"R{i}")] = s
             levels[r["then"]] = np.maximum(levels[r["then"]], s)
+        # When rules fire equally strongly, keep the highest consequent.
+        labels = self.p["output"]
+        for i, label in enumerate(labels[:-1]):
+            higher = np.maximum.reduce([levels[other] for other in labels[i + 1:]])
+            tied = (levels[label] > 0) & np.isclose(levels[label], higher)
+            levels[label][tied] = 0
         mu = np.zeros((len(vs), len(U)))
         for lab, s in levels.items():
             mu = np.maximum(mu, np.minimum(s[:, None], self.out[lab][None, :]))
@@ -142,20 +142,35 @@ class FuzzyEngine:
         return self._infer(self._variable_scores(df))
 
     def score_custom(self, attributes):
-        """Évalue des notes moyennes par catégorie, puis les compare à la population."""
+        """Convertit les notes détaillées en percentiles de catégories."""
+        expected = {
+            col for cfg in self.p["variables"].values() for col in cfg["cols"]
+        }
+        supplied = set(attributes)
+        if supplied != expected:
+            missing = sorted(expected - supplied)
+            extra = sorted(supplied - expected)
+            details = []
+            if missing:
+                details.append(f"attributs manquants : {', '.join(missing)}")
+            if extra:
+                details.append(f"attributs inconnus : {', '.join(extra)}")
+            raise ValueError("; ".join(details))
+
         values = {}
-        for variable, ref in self.variable_ref.items():
-            if variable not in attributes:
-                raise ValueError(f"Renseigne une note pour la catégorie « {variable} »")
-            value = float(attributes[variable])
-            if not 0 <= value <= 99:
-                raise ValueError(f"La note « {variable} » doit être comprise entre 0 et 99")
-            values[variable] = float(
-                (np.searchsorted(ref, value, side="left")
-                 + np.searchsorted(ref, value, side="right"))
-                / (2 * len(ref)) * 100
-            )
-        return self._infer(pd.DataFrame([values]))
+        for variable, cfg in self.p["variables"].items():
+            values[variable] = []
+            for col in cfg["cols"]:
+                value = float(attributes[col])
+                if not np.isfinite(value) or not 0 <= value <= 99:
+                    raise ValueError(f"La note « {col} » doit être comprise entre 0 et 99")
+                values[variable].append(float(self._pct(col, value)))
+        return self._infer(pd.DataFrame([{
+            variable: float(np.mean(scores)) for variable, scores in values.items()
+        }])), {
+            variable: float(np.mean([attributes[col] for col in cfg["cols"]]))
+            for variable, cfg in self.p["variables"].items()
+        }
 
     def explain(self, strengths, idx, top=5):
         """Règles les plus déclenchées pour le joueur d'index idx."""
