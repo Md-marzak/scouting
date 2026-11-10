@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, LEVELS, ruleText } from "./api";
 import Curve from "./Curve";
 
@@ -15,16 +15,21 @@ export default function Rules({ profile, setProfile, name, save }) {
   const [busy, setBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
   const [proposal, setProposal] = useState(null);
+  const requestSeq = useRef(0);
 
   useEffect(() => setSaveName(name), [name]);
 
   // Aperçu en direct : les 5 meilleurs joueurs avec les règles en cours d'édition
   useEffect(() => {
+    const seq = ++requestSeq.current;
     const t = setTimeout(async () => {
       try {
-        setRes(await api.search({ profile, top: 5 }));
+        const found = await api.search({ profile, top: 5 });
+        if (seq !== requestSeq.current) return;
+        setRes(found);
         setErr("");
       } catch (e) {
+        if (seq !== requestSeq.current) return;
         setErr(e.message);
       }
     }, 300);

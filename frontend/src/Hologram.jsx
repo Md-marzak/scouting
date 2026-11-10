@@ -63,7 +63,7 @@ export default function Hologram({ p }) {
           {Object.entries(p.bars).map(([k, v]) => (
             <li key={k}>
               <span>{k}</span>
-              <div className="bar"><i style={{ "--w": `${v}%` }} /></div>
+              <div className="bar"><i key={`${p.pid}-${k}-${v}`} style={{ "--w": `${v}%` }} /></div>
               <b>{v}</b>
             </li>
           ))}

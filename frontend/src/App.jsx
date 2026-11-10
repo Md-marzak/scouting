@@ -81,9 +81,11 @@ export default function App() {
 
       {profile && meta && (
         <main>
-          {tab === "search" ? <Search profile={profile} meta={meta} />
-            : tab === "custom" ? <PlayerCheck profile={profile} />
-              : <Rules profile={profile} setProfile={setProfile} name={name} save={save} />}
+          {tab === "search" && <Search profile={profile} meta={meta} />}
+          <div hidden={tab !== "custom"}>
+            <PlayerCheck profile={profile} />
+          </div>
+          {tab === "rules" && <Rules profile={profile} setProfile={setProfile} name={name} save={save} />}
         </main>
       )}
     </div>

@@ -9,16 +9,30 @@ const json = async (r) => {
   }
   return r.json();
 };
-const send = (method, url, body) =>
-  fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(json);
+const call = async (url, options) => {
+  try {
+    return await json(await fetch(url, { cache: "no-store", ...options }));
+  } catch (e) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") {
+      throw new Error("L'analyse n'a pas répondu. Relance-la.");
+    }
+    throw e;
+  }
+};
+const send = (method, url, body) => call(url, {
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+  signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(45000) : undefined,
+});
 
 export const api = {
-  meta: () => fetch("/api/meta").then(json),
-  profiles: () => fetch("/api/profiles").then(json),
-  getProfile: (n) => fetch(`/api/profiles/${n}`).then(json),
+  meta: () => call("/api/meta"),
+  profiles: () => call("/api/profiles"),
+  getProfile: (n) => call(`/api/profiles/${n}`),
   saveProfile: (n, p) => send("PUT", `/api/profiles/${n}`, p),
   search: (body) => send("POST", "/api/search", body),
-  catalog: () => fetch("/api/catalog").then(json),
+  catalog: () => call("/api/catalog"),
   needsSearch: (body) => send("POST", "/api/needs-search", body),
   evaluatePlayer: (body) => send("POST", "/api/evaluate-player", body),
   explainPlayer: (body) => send("POST", "/api/explain-player", body),

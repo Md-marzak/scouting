@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 
 const LABELS = {
@@ -97,50 +97,101 @@ export default function PlayerCheck({ profile }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiExplanation, setAiExplanation] = useState("");
   const [aiError, setAiError] = useState("");
+  const [runId, setRunId] = useState(0);
+  const [analyzedStamp, setAnalyzedStamp] = useState("");
+  const requestId = useRef(0);
+  const explainId = useRef(0);
+  const reportRef = useRef(null);
+  const columnKey = columns.join("\n");
+  const columnsSeen = useRef(columnKey);
+  const profileStamp = useMemo(() => JSON.stringify(profile), [profile]);
 
   useEffect(() => {
-    setAttributes(Object.fromEntries(columns.map((column) => [column, ""])));
+    setAttributes((current) => {
+      const next = Object.fromEntries(columns.map((column) => [column, current[column] ?? ""]));
+      const same = columns.length === Object.keys(current).length
+        && columns.every((column) => current[column] === next[column]);
+      return same ? current : next;
+    });
+  }, [columnKey, columns]);
+
+  useEffect(() => {
+    if (columnsSeen.current === columnKey) return;
+    columnsSeen.current = columnKey;
     setResult(null);
+    setRunId(0);
+    setAnalyzedStamp("");
     setError("");
     setAiExplanation("");
     setAiError("");
-  }, [columns]);
+  }, [columnKey]);
+
+  useEffect(() => {
+    if (!runId) return;
+    reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [runId]);
+
+  const readPlayer = (form) => {
+    const data = new FormData(form);
+    const playerName = String(data.get("playerName") || "").trim();
+    const nextAttributes = Object.fromEntries(
+      columns.map((column) => [column, Number(data.get(column))]),
+    );
+    return { playerName, nextAttributes };
+  };
 
   const evaluate = async (event) => {
     event.preventDefault();
+    const { playerName, nextAttributes } = readPlayer(event.currentTarget);
+    if (!playerName || columns.some((column) => !Number.isFinite(nextAttributes[column]))) {
+      setError("Renseigne le nom et toutes les notes avant de relancer l'analyse.");
+      return;
+    }
+    const id = ++requestId.current;
+    explainId.current += 1;
+    setAiBusy(false);
+    setName(playerName);
+    setAttributes(Object.fromEntries(columns.map((column) => [column, String(nextAttributes[column])])));
     setBusy(true);
     setError("");
     setAiExplanation("");
     setAiError("");
     try {
       const evaluated = await api.evaluatePlayer({
-        name,
+        name: playerName,
         profile,
-        attributes: Object.fromEntries(columns.map((column) => [column, Number(attributes[column])])),
+        attributes: nextAttributes,
       });
-      setResult(evaluated);
+      if (id !== requestId.current) return;
+      setAnalyzedStamp(profileStamp);
+      setRunId(id);
+      setResult({ ...evaluated, generatedAt: Date.now() });
     } catch (e) {
+      if (id !== requestId.current) return;
       setError(e.message);
-      setResult(null);
     } finally {
-      setBusy(false);
+      if (id === requestId.current) setBusy(false);
     }
   };
 
   const explainWithAi = async () => {
+    const id = ++explainId.current;
     setAiBusy(true);
     setAiError("");
+    setAiExplanation("");
     try {
       const response = await api.explainPlayer({
         name,
         profile,
         attributes: Object.fromEntries(columns.map((column) => [column, Number(attributes[column])])),
       });
+      if (id !== explainId.current) return;
       setAiExplanation(response.explanation);
     } catch (e) {
+      if (id !== explainId.current) return;
       setAiError(e.message);
     } finally {
-      setAiBusy(false);
+      if (id === explainId.current) setAiBusy(false);
     }
   };
 
@@ -160,6 +211,10 @@ export default function PlayerCheck({ profile }) {
     ? Object.entries(result.categories).sort((a, b) => b[1] - a[1])
     : [];
   const topRule = result?.rules[0];
+  const profileChanged = Boolean(result && analyzedStamp && analyzedStamp !== profileStamp);
+  const updatedAt = result?.generatedAt
+    ? new Date(result.generatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "";
 
   return (
     <div className="player-lab">
@@ -179,16 +234,18 @@ export default function PlayerCheck({ profile }) {
         <div className="hero-mark" aria-hidden="true">01</div>
       </section>
 
-      <form className="player-form" onSubmit={evaluate}>
+      <form className="player-form" autoComplete="off" onSubmit={evaluate}>
         <section className="identity-panel">
           <div className="section-index">01 <span>IDENTITÉ DU PROSPECT</span></div>
           <label className="identity-field">
             Nom du joueur
             <input
+              name="playerName"
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength="80"
               required
+              autoComplete="off"
               placeholder="Ex. Nouveau numéro 10"
             />
           </label>
@@ -221,15 +278,18 @@ export default function PlayerCheck({ profile }) {
                     <label className="attribute-field" key={column}>
                       <span>{LABELS[column] || humanize(column)}</span>
                       <input
+                        name={column}
                         type="number"
                         min="0"
                         max="99"
                         step="1"
                         required
+                        autoComplete="off"
                         value={attributes[column] ?? ""}
-                        onChange={(event) =>
-                          setAttributes({ ...attributes, [column]: event.target.value })
-                        }
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setAttributes((current) => ({ ...current, [column]: value }));
+                        }}
                         aria-label={`${LABELS[column] || humanize(column)}, note sur 99`}
                         placeholder="—"
                       />
@@ -249,20 +309,30 @@ export default function PlayerCheck({ profile }) {
         <div className="evaluate-bar">
           <p><b>Le calcul se fait en 3 temps</b><span>Attributs → percentiles du poste → règles floues</span></p>
           <button className="btn evaluate-btn" type="submit" disabled={busy}>
-            {busy ? "Analyse en cours…" : <>Lancer l’analyse <span aria-hidden="true">↗</span></>}
+            {busy ? "Analyse en cours…" : <>{result ? "Relancer l’analyse" : "Lancer l’analyse"} <span aria-hidden="true">↗</span></>}
           </button>
         </div>
+        {profileChanged && (
+          <div className="banner" role="status">Les règles du profil ont changé. Relance l’analyse pour mettre à jour ce joueur.</div>
+        )}
         {error && <div className="banner error" role="alert">{error}</div>}
+        <p className="live-status" aria-live="polite">
+          {busy ? "Nouvelle analyse en cours." : result ? `${result.name}, score ${Math.round(result.score)}, ${result.verdict}.` : ""}
+        </p>
       </form>
 
       {result && (
-        <section className="analysis-board" aria-live="polite">
+        <section
+          className={`analysis-board${busy ? " is-updating" : ""}`}
+          key={runId}
+          ref={reportRef}
+        >
           <header className="analysis-header">
             <div>
               <span className="lab-kicker dark-kicker">RAPPORT DE COMPATIBILITÉ · {profile.groupe || "MOC"}</span>
               <h2>{result.name}</h2>
             </div>
-            <span className="report-stamp">RAPPORT GÉNÉRÉ</span>
+            <span className="report-stamp">{busy ? "MISE À JOUR…" : `ANALYSE ${updatedAt}`}</span>
           </header>
 
           <div className="analysis-overview">
@@ -340,7 +410,7 @@ export default function PlayerCheck({ profile }) {
               {aiBusy ? "Analyse IA en cours…" : "Générer l’explication"}
             </button>
             {aiError && <div className="banner error" role="alert">{aiError}</div>}
-            {aiExplanation && <p className="ai-explanation" aria-live="polite">{aiExplanation}</p>}
+            {aiExplanation && <p className="ai-explanation">{aiExplanation}</p>}
           </section>
           <footer className="report-footnote">
             Résultat indicatif, calculé par comparaison aux joueurs du poste et aux règles du profil. Les notes d’entrée sont des attributs de jeu.

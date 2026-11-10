@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import Hologram from "./Hologram";
 
@@ -15,6 +15,8 @@ export default function Search({ profile }) {
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(null);
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     api.catalog().then((c) => {
@@ -25,17 +27,23 @@ export default function Search({ profile }) {
 
   useEffect(() => {
     if (!catalog.length) return;
+    const seq = ++requestSeq.current;
+    setLoading(true);
     const t = setTimeout(async () => {
       try {
         const r = await api.needsSearch({
           profile, strict, top, rule_weight: ruleWeight,
           needs: needs.filter((n) => n.value !== "").map((n) => ({ ...n, value: Number(n.value) })),
         });
+        if (seq !== requestSeq.current) return;
         setRes(r);
         setErr("");
         setSel((s) => (r.players.some((p) => p.pid === s) ? s : r.players[0]?.pid ?? null));
       } catch (e) {
+        if (seq !== requestSeq.current) return;
         setErr(e.message);
+      } finally {
+        if (seq === requestSeq.current) setLoading(false);
       }
     }, 300);
     return () => clearTimeout(t);
@@ -106,9 +114,9 @@ export default function Search({ profile }) {
 
         {err && <div className="banner error" role="alert">{err}</div>}
         <p className="muted count">
-          {res ? `${res.matching} joueurs sur ${res.total} satisfont bien l'ensemble des critères` : "Calcul en cours…"}
+          {loading && res ? "Mise à jour de l'analyse…" : res ? `${res.matching} joueurs sur ${res.total} satisfont bien l'ensemble des critères` : "Calcul en cours…"}
         </p>
-        <ol className="players">
+        <ol className={loading ? "players is-updating" : "players"}>
           {res?.players.map((p, i) => (
             <li key={p.pid}>
               <button className={p.pid === sel ? "row active" : "row"} onClick={() => setSel(p.pid)}>
