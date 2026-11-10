@@ -35,6 +35,7 @@ export const api = {
   catalog: () => call("/api/catalog"),
   needsSearch: (body) => send("POST", "/api/needs-search", body),
   evaluatePlayer: (body) => send("POST", "/api/evaluate-player", body),
+  interpretPlayer: (body) => send("POST", "/api/interpret-player", body),
   explainPlayer: (body) => send("POST", "/api/explain-player", body),
   suggest: (body) => send("POST", "/api/suggest-rules", body),
 };

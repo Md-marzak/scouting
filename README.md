@@ -35,11 +35,11 @@ npm install
 npm run dev                      # http://localhost:5173
 ```
 
-Pour les fonctions IA (suggestion de règles et explication du joueur, via Groq), définis
-`GROQ_API_KEY` dans l'environnement avant de lancer uvicorn, par exemple sous PowerShell :
-`$env:GROQ_API_KEY="ta_nouvelle_cle"`. Ne mets jamais la clé dans le code ni sur GitHub.
-La clé est utilisée uniquement par le backend. Dans « Mon joueur », clique sur
-« Générer l’explication » après l’analyse pour obtenir le commentaire du scout IA.
+Pour les fonctions IA (traduction d'une description en notes, suggestion de règles et explication
+du joueur, via Groq), copie `backend/.env.example` vers `backend/.env` et renseigne
+`GROQ_API_KEY`. Relance ensuite uvicorn : le fichier est lu au démarrage. Ne commite jamais
+`.env`. La clé reste côté backend. Dans « Mon joueur », « Traduire en notes » remplit les
+attributs sur 99 à partir d'une phrase, et « Générer l’explication » commente le verdict.
 
 ## 3. Comment ça marche
 

@@ -97,6 +97,9 @@ export default function PlayerCheck({ profile }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiExplanation, setAiExplanation] = useState("");
   const [aiError, setAiError] = useState("");
+  const [brief, setBrief] = useState("");
+  const [interpretBusy, setInterpretBusy] = useState(false);
+  const [interpretError, setInterpretError] = useState("");
   const [runId, setRunId] = useState(0);
   const [analyzedStamp, setAnalyzedStamp] = useState("");
   const requestId = useRef(0);
@@ -124,12 +127,38 @@ export default function PlayerCheck({ profile }) {
     setError("");
     setAiExplanation("");
     setAiError("");
+    setInterpretError("");
   }, [columnKey]);
 
   useEffect(() => {
     if (!runId) return;
     reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [runId]);
+
+  const interpret = async () => {
+    setInterpretBusy(true);
+    setInterpretError("");
+    try {
+      const response = await api.interpretPlayer({ brief, profile });
+      setAttributes((current) => {
+        const next = { ...current };
+        for (const [column, value] of Object.entries(response.attributes)) {
+          if (columns.includes(column)) next[column] = String(value);
+        }
+        return next;
+      });
+      if (!name.trim() && response.name) setName(response.name);
+      setResult(null);
+      setRunId(0);
+      setAnalyzedStamp("");
+      setAiExplanation("");
+      setAiError("");
+    } catch (e) {
+      setInterpretError(e.message);
+    } finally {
+      setInterpretBusy(false);
+    }
+  };
 
   const readPlayer = (form) => {
     const data = new FormData(form);
@@ -250,6 +279,31 @@ export default function PlayerCheck({ profile }) {
             />
           </label>
           <p className="identity-tip"><b>SCOUT NOTE</b> Les notes demandées sont celles de la carte, sur 99. Tu n’as pas à calculer les catégories toi-même.</p>
+        </section>
+
+        <section className="brief-panel">
+          <div>
+            <div className="section-index">01 <span>DESCRIPTION LIBRE</span></div>
+            <h3>Du français aux notes.</h3>
+          </div>
+          <label className="brief-field">
+            Décris le joueur
+            <textarea
+              rows="3"
+              value={brief}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder="Très bon tireur, rapide sur les premiers mètres, passes correctes, faible en défense."
+            />
+          </label>
+          <button
+            className="btn evaluate-btn brief-btn"
+            type="button"
+            onClick={interpret}
+            disabled={interpretBusy || brief.trim().length < 8}
+          >
+            {interpretBusy ? "Traduction…" : "Traduire en notes"}
+          </button>
+          {interpretError && <div className="banner error" role="alert">{interpretError}</div>}
         </section>
 
         <div className="attribute-heading">

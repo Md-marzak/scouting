@@ -315,6 +315,21 @@ body {
 .identity-field input { border-radius: 10px; }
 .identity-tip { margin: 0; color: #78827a; font-size: 12px; }
 .identity-tip b { display: block; margin-bottom: 5px; color: #7da64f; font-size: 9px; letter-spacing: .16em; }
+.brief-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(0, 1.6fr) auto;
+  align-items: end;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 20px 24px;
+  border: 1px solid #e1e6dc;
+  border-radius: 16px;
+  background: #fffefa;
+}
+.brief-panel h3 { margin: 8px 0 0; color: var(--lab-ink); font-size: 22px; }
+.brief-field textarea { width: 100%; min-height: 74px; margin: 0; border-radius: 10px; }
+.brief-btn { white-space: nowrap; }
+.brief-panel .banner { grid-column: 1 / -1; margin: 0; }
 .attribute-heading {
   display: flex;
   justify-content: space-between;
@@ -545,7 +560,7 @@ body {
   .hero-stamp small { display: none; }
   .hero-stamp > span { font-size: 8px; }
   .hero-mark { right: 8px; bottom: -18px; font-size: 130px; }
-  .identity-panel { grid-template-columns: 1fr; gap: 12px; }
+  .identity-panel, .brief-panel { grid-template-columns: 1fr; gap: 12px; }
   .identity-field { max-width: none; }
   .attribute-heading { align-items: flex-start; flex-direction: column; }
   .attribute-heading > p { text-align: left; }
